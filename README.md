@@ -4,7 +4,7 @@ Using the past climate and PM2.5 data in Beijing, build an accurate classificati
 
 ## Executive Summary
 
-Due to the rapid growth of economics and urbanization, air quality problem catches both government and public’s eyes, especially in some most populated and industrialized cities such as Beijing. Beijing, the capital of the People’s Republic of China and the world’s second most populous city, is known for air pollution and constantly batting against widespread health problems caused by air pollution. To help citizen of Beijing with this issue, we decided to make a statistical prediction model based on the past climate and PM2.5 data in order to give alerts to citizen of Beijing. The alerts will advise the citizens to take the necessary health caution.
+Due to the rapid growth of economics and urbanization, air quality problem catches both government and public’s eyes, especially in some most populated and industrialized cities such as Beijing. Beijing, the capital of the People’s Republic of China and the world’s second most populous city, is known for air pollution and constantly batting against widespread health problems caused by air pollution. To help the citizen of Beijing with this issue, we decided to make a statistical prediction model based on the past climate and PM2.5 data in order to give alerts to the citizen of Beijing. The alerts will advise the citizens to take the necessary health caution.
 
 ## Data Description
 
@@ -46,4 +46,4 @@ Due to the rapid growth of economics and urbanization, air quality problem catch
 
 ## Conclusion
 
-Overall, the cross validated random forest model with 5 randomly selected predictors (mtry = 5) had the best accuracy of predicting the PM2.5 level based on the climate data. We also check variable importance and found that dew point is the most influencing variable in predicting the PM2.5 level. In addition, the variable importance shows that the cumulated hours of snow variable is not influencing the prediction.
+Overall, the cross-validated random forest model with 5 randomly selected predictors (mtry = 5) had the best accuracy of predicting the PM2.5 level based on the climate data. We also check variable importance and found that dew point is the most influencing variable in predicting the PM2.5 level. In addition, the variable importance shows that the cumulated hours of snow variable is not influencing the prediction.
