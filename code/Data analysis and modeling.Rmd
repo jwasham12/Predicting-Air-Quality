@@ -1,0 +1,312 @@
+---
+title: "Predicting PM2.5 levels of Beijing, China"
+author: "Charles Liu, Hao Qiu, Curties Wurster, Jason Washam"
+date: "4/18/2018"
+output: 
+  html_document:
+    theme: simplex
+abstract: Due to the rapid growth of economics and urbanization, air quality problem catches both government and public’s eyes, especially in some most populated and industrialized cities such as Beijing. Beijing, the capital of the People's Republic of China and the world's second most populous city, is known for air pollution and constantly batting against widespread health problems caused by air pollution. To help citizen of Beijing with this issue, we decided to make a statistical prediction model based on the past climate and PM2.5 data in order to give alerts to citizen of Beijing. The alerts will advise the citizens to take the necessary health caution. 
+urlcolor: Cerulean
+---
+
+```{r echo=FALSE}
+knitr:: opts_chunk$set(cache=TRUE)
+```
+
+# Introduction
+
+Over the past few decades, rapid urbanization and industrialization has left China in a struggle to improve and contain serious environmental issues, especially issues concerning extensive air pollution caused by PM2.5. Fine particulate matter 2.5 (PM2.5) refers to tiny particles or droplets in the air which can travel deeply into the respiratory system, reducing lung function and having the ability to cause cancer in cases of long-term exposure. The government wants to find a way to predict the PM2.5 level in the city of Beijing a day in advance in order to give alerts to the citizens to take protective measures ahead of time, decreasing the chance to inhale PM2.5. To efficiently predict the air quality of Beijing, it is crucial to understand the factors influencing pm2.5. By using significant variables provided in the data set, we aim to predict the class of pm2.5 based on the classification model and furthermore propose potential approaches to address air pollution issues. 
+
+```{r load-packages, message=FALSE, warning=FALSE, include=FALSE}
+library(knitr)
+library(kableExtra)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(tree)
+library(randomForest)
+library(MASS)
+library(ISLR)
+library(lattice)
+library(ggplot2)
+library(survival)
+library(splines)
+library(parallel)
+library(plyr)
+library(gbm)
+library(glmnet)
+library(GGally)
+library(colorspace)
+```
+
+# Method
+
+## Data
+
+### Data Description
+
+```{r, echo=FALSE}
+pm2_5 = read.csv("pm_data.csv")
+```
+
+```{r, echo=FALSE, eval=FALSE}
+nrow(pm2_5)
+ncol(pm2_5)
+```
+
+Our data set contains 43,824 observations with 13 different variables. This data set concerns PM2.5 levels in Beijing from 2010 to 2014, including variables such as year, month, pm2.5 concentration(numeric), temperature, and air pressure etc. By using the selected features, we aim to predict the class of pm2.5 based on the **classification** model and furthermore propose potential approaches to address air pollution issues. Therefore, this analysis, albeit lacking in chemical analysis, is statistically meaningful.
+
+### Data Cleaning
+
+```{r, echo=FALSE, eval=FALSE}
+sum((is.na(pm2_5) == TRUE))
+pm2_5 = na.omit(pm2_5)
+```
+
+There are 2067 NA in pm2.5 column. However since our data set contains total 43824 rows, we can remove rows where pm2.5 is NA. Also, we removed the row indexing numbers. We also created additional columns Season, and Time, which are a categorical variable indicating the month and hour of the data. Season will contain four levels, namely Spring(month 3 to 5), Summer(month 6 to 8), Autumn(month 9 to 11) and Winter(month 12 to 2). Time will have four levels, namely Morning(hour 6 to 11), Afternoon(hour 12 to 17), Evening(hour 18 to 22), Midnight(hour 23 to 24, 0 to 5). We will remove `month`, `day` and `hour` after we create Season and Time.
+
+```{r, echo=FALSE, warning=FALSE}
+sp = seq(3, 5)
+su = seq(6, 8)
+au = seq(9, 11)
+wi = c(12, 1, 2)
+
+mor = seq(6, 11)
+aft = seq(12, 17)
+eve = seq(18, 22)
+mid = c(23, 24, 0, 1, 2, 3, 4, 5)
+
+#season
+pm2_5$season[as.integer(pm2_5$month) %in% sp] = "Spring"
+pm2_5$season[as.integer(pm2_5$month) %in% su] = "Summer"
+pm2_5$season[as.integer(pm2_5$month) %in% au] = "Autumn"
+pm2_5$season[as.integer(pm2_5$month) %in% wi] = "Winter"
+
+#time
+pm2_5$time[as.integer(pm2_5$hour) %in% mor] = "Morning"
+pm2_5$time[as.integer(pm2_5$hour) %in% aft] = "Afternoon"
+pm2_5$time[as.integer(pm2_5$hour) %in% eve] = "Evening"
+pm2_5$time[as.integer(pm2_5$hour) %in% mid] = "Midnight"
+```
+
+```{r, echo=FALSE}
+pm2_5 = pm2_5[, -c(1, 2, 3, 4, 5)]
+```
+
+The details of variables can be found in appendix
+
+### Classification
+
+```{r, echo=FALSE, warning=FALSE}
+pm2_5$pm2.5[as.integer(pm2_5$pm2.5) <= 100] = 'Good'
+pm2_5$pm2.5[as.integer(pm2_5$pm2.5) > 100] = 'Dangerous'
+```
+
+We divided the response variable, PM2.5, into two classes: good and dangerous. Our good classification refers to satisfactory air conditions with little to no risk posed through air pollution. Our hazardous classification warns that outdoor activity should be completely avoided due to the fact that everyone will be affected by the air quality. We labeled PM2.5 level greater than 100 as dangerous and below 100 as good air condition. With this classification, the public will able to easily understand the result of the prediction model.
+
+### Test Train Split
+
+```{r, echo=FALSE, eval=FALSE}
+set.seed(432)
+pm_idx = createDataPartition(pm2_5$pm2.5, p = 0.8, list = FALSE)
+pm_trn  = pm2_5[pm_idx,]
+pm_tst = pm2_5[-pm_idx,]
+```
+
+Considering that we are going to perform 5-fold cross validation and calculate test accuracy to compare models, we split our data set into two parts. 80% of the data set is our training data and the other 20% is our testing data.
+
+## Model
+
+```{r, echo=FALSE}
+cv_5 = trainControl(method = "cv", number = 5)
+```
+
+```{r, cache=TRUE, echo=FALSE}
+set.seed(432)
+pm_logit = train(
+  pm2.5 ~ .,
+  data = pm_trn,
+  method = "glm",
+  trControl = cv_5
+)
+```
+
+```{r, cache=TRUE, echo=FALSE}
+set.seed(432)
+pm_knn_cv = train(
+  pm2.5 ~ .,
+  data = pm_trn,
+  method = "knn",
+  trControl = cv_5,
+  tuneGrid = expand.grid(k = seq(5, 30, by = 5))
+)
+```
+
+```{r, cache=TRUE, echo=FALSE}
+set.seed(432)
+pm_knn_cv_scale = train(
+  pm2.5 ~ .,
+  data = pm_trn,
+  method = "knn",
+  trControl = cv_5,
+  preProcess = c("center", "scale"),
+  tuneGrid = expand.grid(k = seq(5, 30, by = 5))
+)
+```
+
+```{r, cache=TRUE, echo=FALSE}
+set.seed(432)
+pm_bag_oob = train(pm2.5 ~ ., data = pm_trn,
+                     method = "rf",
+                     trControl = trainControl(method = "oob"),
+                     verbose = FALSE,
+                     tuneGrid = expand.grid(mtry = 4))
+
+
+set.seed(432)
+pm_rf_cv = train(pm2.5 ~ ., data = pm_trn,
+                     method = "rf",
+                     trControl = trainControl(method = "cv", number = 5),
+                     verbose = FALSE,
+                     tuneGrid = expand.grid(mtry=1:5))
+```
+
+```{r, cache=TRUE, echo=FALSE}
+set.seed(432)
+gbm_grid = expand.grid(interaction.depth = 1:4,
+                     n.trees = (1:4)*1000,
+                     shrinkage = c(0.001,0.01),
+                     n.minobsinnode = 10)
+set.seed(432)
+pm_gbm_cv = train(
+  pm2.5 ~ .,
+  data = pm_trn,
+  method = "gbm",
+  trControl = cv_5,
+  verbose = FALSE,
+  tuneGrid = gbm_grid
+)
+```
+
+Since we decided to use classification method, we discussed methods such as K Nearest Neighbor, Random Forest, and Linear Discriminant Analysis. In addition, we also wanted to perform cross validation in order to obtain accuracy of the model. The model accuracy and the test accuracy is measured for each model to compare and decide the best model for prediction. Using caret, we decided to use Logistic regression, K Nearest Neighbor (scaled and not scaled), Random Forest (out of bag and cross validated) and gradient boosting method for our analysis. 
+
+# Result 
+
+```{r, echo = FALSE}
+cal_accuracy = function(actual, predicted) {
+  mean(actual == predicted)
+}
+
+get_best_result = function(caret_fit) {
+  best_result = caret_fit$results[as.numeric(rownames(caret_fit$bestTune)), ]
+  rownames(best_result) = NULL
+  best_result
+}
+```
+
+```{r, echo=FALSE}
+trn_accuracy = c(
+  get_best_result(pm_logit)['Accuracy'][1,],
+  get_best_result(pm_knn_cv)["Accuracy"][1,],
+  get_best_result(pm_knn_cv_scale)["Accuracy"][1,],
+  get_best_result(pm_bag_oob)["Accuracy"][1,],
+  get_best_result(pm_rf_cv)["Accuracy"][1,],
+  get_best_result(pm_gbm_cv)["Accuracy"][1,]
+)
+```
+
+```{r, echo=FALSE}
+tst_accuracy = c(
+  cal_accuracy(
+    actual = pm_tst$pm2.5,
+    predicted = predict(pm_logit, newdata = pm_tst)),
+  cal_accuracy(
+    actual = pm_tst$pm2.5,
+    predicted = predict(pm_knn_cv, newdata = pm_tst)),
+  cal_accuracy(
+    actual = pm_tst$pm2.5,
+    predicted = predict(pm_knn_cv_scale, newdata = pm_tst)),
+  cal_accuracy(
+    actual = pm_tst$pm2.5,
+    predicted = predict(pm_bag_oob, newdata = pm_tst)),
+  cal_accuracy(
+    actual = pm_tst$pm2.5,
+    predicted = predict(pm_rf_cv, newdata = pm_tst)),
+  cal_accuracy(
+    actual = pm_tst$pm2.5,
+    predicted = predict(pm_gbm_cv, newdata = pm_tst))
+)
+```
+
+```{r, echo=FALSE}
+mod_name = c("logistic Regression","KNN CV","KNN CV scale","Bagging oob","Random Forest CV", "Boosting, CV")
+```
+
+```{r, echo=FALSE}
+accuracy_table = data.frame(
+  mod_name,
+  trn_accuracy,
+  tst_accuracy
+)
+
+colnames(accuracy_table) = c("Model", "Train Accuracy", "Test Accuracy")
+
+knitr::kable(accuracy_table, escape = FALSE, booktabs = TRUE)
+```
+
+# Discussion
+
+```{r, echo=FALSE, eval=FALSE}
+pm_rf_cv
+```
+
+```{r, echo=FALSE, eval=FALSE}
+varImp(pm_rf_cv)
+```
+
+The result shows the train and test accuracy of each different cross validated models starting from simple logistic regression to generalized boosted regression. We also included the bagging model to see if ensemble method works better with our data. Overall, the cross validated random forest model with 5 randomly selected predictors (mtry = 5) had the best accuracy of predicting the PM2.5 level based on the climate data. We also check variable importance and found that dew point is the most influencing variable in predicting the PM2.5 level. In addition, the variable importance shows that the cumulated hours of snow variable is not influencing the prediction.
+
+# Appendix
+
+|Name|Data Type|Description|
+|----|---------|-----------|
+|Year|Continuous|Year of data in this row|
+|PM2.5|Categorical|PM2.5 Concentration (ug/m^3)|
+|DEWP|Continuous|Dew Point (Celsius Degree)|
+|TEMP|Continuous|Temperature (Celsius Degree)|
+|PRES|Continuous|Pressure (hPa)|
+|cbwd|Categorical|Combined wind direction|
+|lws|Continuous|Cumulated wind speed (m/s)|
+|ls|Continuous|Cumulated hours of snow|
+|lr|Continuous|Cumulated hours of rain|
+|season|Categorical|Season of data in this row|
+|time|Categorical|Time of data in this row|
+
+```{r, warning = FALSE, message = FALSE, solution = TRUE, echo = FALSE, fig.align = "center", fig.width = 8, fig.height = 8}
+species_col = rev(rainbow_hcl(3))[as.factor(pm2_5$pm2.5)]
+pairs(pm2_5[,c("DEWP", "TEMP", "PRES")], col = species_col,
+      lower.panel = NULL,
+       cex.labels=2, pch=19, cex = 0.3)
+par(xpd=TRUE)
+legend("left", as.vector(unique(as.factor(pm2_5$pm2.5))),  
+       fill=rev(rainbow_hcl(3))[unique(as.factor(pm2_5$pm2.5))])
+
+```
+
+## Exploratory Data Analysis
+
+**PM 2.5 Value Distribution**
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(data = pm2_5, aes(pm2_5$pm2.5)) + geom_histogram() + ggtitle('PM 2.5 Distribution') + xlab('PM2.5')
+```
+
+**Temperature VS Pressure**
+```{r, warning = FALSE, message = FALSE, solution = TRUE, echo = FALSE, fig.align = "center", fig.width = 8, fig.height = 5}
+qplot(x = TEMP, y = PRES, data = pm2_5, col = pm2.5, main = "Temperature VS Pressure")
+```
+
+**Temperature VS Dew Point**
+```{r, warning = FALSE, message = FALSE, solution = TRUE, echo = FALSE, fig.align = "center", fig.width = 8, fig.height = 5}
+qplot(y = DEWP, x = TEMP, data = pm2_5, col = pm2.5, main = "Temperature VS Dew points")
+```
